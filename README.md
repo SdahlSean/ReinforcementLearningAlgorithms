@@ -1,1 +1,1 @@
-# ReinforcmentLearningAlgorithms
+# ReinforcementLearningAlgorithms
