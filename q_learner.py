@@ -95,6 +95,18 @@ class QLearner:
         self.optimizer.zero_grad()
         
     def reset_traces(self):
+        for parameter in self.model.parameters():
+            try:
+                parameter.grad *= -1
+            except TypeError:
+                break
+        self.td_optimizer.step()
+        for parameter in self.model.parameters():
+            try:
+                parameter.grad /= -(1 - self.td_lambda)
+            except TypeError:
+                break
+        self.td_optimizer.step()
         self.td_optimizer.zero_grad()
 
     def predict_q_values(self, state):
