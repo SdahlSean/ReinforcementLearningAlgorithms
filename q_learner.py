@@ -1,3 +1,9 @@
+import copy
+import queue
+import numpy as np
+import torch as pt
+
+
 class QLearner:
     
     def __init__(self, alpha=0.1, gamma=0.99, epsilon=1, epsilon_decay=1, td_lambda=0, batch_size=1, replay_size=1, copy_every=1, model=None, n_observations=None, n_actions=None):
