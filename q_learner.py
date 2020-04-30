@@ -1,9 +1,3 @@
-import copy
-import queue
-import numpy as np
-import torch as pt
-
-
 class QLearner:
     
     def __init__(self, alpha=0.1, gamma=0.99, epsilon=1, epsilon_decay=1, td_lambda=0, batch_size=1, replay_size=1, copy_every=1, model=None, n_observations=None, n_actions=None):
@@ -45,28 +39,36 @@ class QLearner:
         
     def step(self, state, action, reward, next_state, next_action):
         self.n += 1
-        if self.copy_every > 0 and self.n % self.copy_every == 0:
+        if self.n % self.copy_every == 0:
             self.target_model.load_state_dict(self.model.state_dict())
         q_values = self.model(pt.Tensor(state))
+        q_value = q_values[np.argmax(action)]
         q_target = reward + self.gamma * self.target_model(pt.Tensor(next_state)).detach()[np.argmax(next_action)]
         q_targets = pt.Tensor([q_value for q_value in q_values])
         q_targets[np.argmax(action)] = q_target
-        loss = self.criterion(q_targets, q_values)
-        error = pt.sum(q_targets - q_values)
+        error = (q_target - q_value).item()
+        if self.td_lambda == 0:
+            self.td_optimizer.zero_grad()
+        elif error == 0:
+            self.replay_memory.append((state, action, reward, tuple(next_state), tuple(next_action)))
+            return
+        else:
+            for parameter in self.model.parameters():
+                try:
+                    parameter.grad *= self.td_lambda * self.gamma
+                except TypeError:
+                    break
+        q_value.backward()
         for parameter in self.model.parameters():
-            try:
-                parameter.grad *= self.td_lambda * self.gamma * error
-            except TypeError:
-                break
-        loss.backward()
+            parameter.grad *= -error
         self.td_optimizer.step()
-        for parameter in model.parameters():
-            parameter.grad /= error
+        for parameter in self.model.parameters():
+            parameter.grad /= -error
         self.replay_memory.append((state, action, reward, tuple(next_state), tuple(next_action)))
         
     def q_step(self, state, action, reward, next_state):
         self.n += 1
-        if self.copy_every > 0 and self.n % self.copy_every == 0:
+        if self.n % self.copy_every == 0:
             self.target_model.load_state_dict(self.model.state_dict())
         q_values = self.model(pt.Tensor(state))
         next_q_values = self.target_model(pt.Tensor(next_state)).detach()
@@ -95,18 +97,6 @@ class QLearner:
         self.optimizer.zero_grad()
         
     def reset_traces(self):
-        for parameter in self.model.parameters():
-            try:
-                parameter.grad *= -1
-            except TypeError:
-                break
-        self.td_optimizer.step()
-        for parameter in self.model.parameters():
-            try:
-                parameter.grad /= -(1 - self.td_lambda)
-            except TypeError:
-                break
-        self.td_optimizer.step()
         self.td_optimizer.zero_grad()
 
     def predict_q_values(self, state):
@@ -125,7 +115,7 @@ class QLearner:
     def epsilon_greedy_action(self, state):
         self.k += 1
         if np.random.random() > self.epsilon / (1 + self.k * self.epsilon_decay):
-            q_values = self.model(pt.Tesnor(state))
+            q_values = self.model(pt.Tensor(state))
             return np.eye(self.n_actions)[np.argmax(q_values.detach())]
         else:
             return np.eye(self.n_actions)[np.random.randint(self.n_actions)]
